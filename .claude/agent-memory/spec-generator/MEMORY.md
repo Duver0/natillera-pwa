@@ -1,0 +1,1 @@
+- [Natillera PWA Financial Design](natillera-pwa-architecture.md) — PWA for personal loans + savings, interest on pending capital only, mandatory payment order
