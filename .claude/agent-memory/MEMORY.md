@@ -1,0 +1,2 @@
+- [Natillera PWA Architecture](natillera-pwa-architecture.md) — Personal loans + savings PWA, FastAPI + Supabase PostgreSQL, multi-tenant ready
+- [Natillera Multi-Tenant Auth Decisions](spec-generator/natillera-multitenant-auth-decisions.md) — Supabase Auth + RLS + BaseService pattern, user_id on every table, triple-layer data isolation

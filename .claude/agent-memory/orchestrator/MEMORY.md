@@ -1,0 +1,1 @@
+- [Natillera PWA State](project_natillera_state.md) — Week 2 gate written 2026-04-23; schema fix done; icons PENDING-HUMAN; live DB PENDING-HUMAN
