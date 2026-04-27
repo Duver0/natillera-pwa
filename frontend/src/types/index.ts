@@ -70,11 +70,26 @@ export interface ClientSummary {
   savings_total: number
 }
 
+export interface UpdatedCreditSnapshot {
+  pending_capital: string // Decimal string from backend
+  mora: boolean
+  version: number
+}
+
 export interface PaymentPreview {
   credit_id: string
-  amount: number
+  total_amount: string // Decimal string
   applied_to: PaymentAppliedTo[]
-  unallocated: number
+  unallocated: string // Decimal string
+  updated_credit_snapshot: UpdatedCreditSnapshot
+}
+
+export interface PaymentResponse {
+  payment_id: string
+  credit_id: string
+  total_amount: string // Decimal string
+  applied_to: PaymentAppliedTo[]
+  updated_credit_snapshot: UpdatedCreditSnapshot
 }
 
 export type InstallmentStatus = 'UPCOMING' | 'PARTIALLY_PAID' | 'PAID' | 'SUSPENDED'
@@ -97,8 +112,8 @@ export interface Installment {
 
 export interface PaymentAppliedTo {
   type: 'OVERDUE_INTEREST' | 'OVERDUE_PRINCIPAL' | 'FUTURE_PRINCIPAL'
-  amount: number
-  installment_id?: string
+  amount: string // Decimal string from backend
+  installment_id: string
 }
 
 export interface Payment {

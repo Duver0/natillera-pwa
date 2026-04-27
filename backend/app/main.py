@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import get_settings
-from app.db import init_supabase
+from app.db import init_database, close_database
 from app.middleware.auth import auth_middleware
 from app.middleware.error_handler import register_error_handlers
 from app.routes import (
@@ -19,8 +19,9 @@ from app.routes import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_supabase()
+    await init_database()
     yield
+    await close_database()
 
 
 settings = get_settings()

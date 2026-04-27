@@ -99,3 +99,25 @@ El proyecto sigue Agent-Spec-Driven Development:
 - ⏳ **Semana 3**: Por definir
 
 Reportes en `.github/qa/week-*-report.md`.
+
+## Running with Docker
+
+```bash
+# 1. Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your Supabase credentials
+
+# 2. Start all services
+docker compose up --build
+
+# 3. Access the app
+# Frontend: http://localhost:5173
+# Backend: http://localhost:8000
+# Backend health: http://localhost:8000/health
+```
+
+### Notes
+
+- Uses Supabase cloud (not local PostgreSQL) — Configure `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE` in `.env`
+- Frontend accesses backend via `http://backend:8000` inside Docker network
+- Backend exposes health endpoint at `/health`

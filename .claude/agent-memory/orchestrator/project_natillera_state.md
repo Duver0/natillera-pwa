@@ -46,3 +46,31 @@ Week 2 + gap fixes complete 2026-04-23.
 **Residual blockers (require human action):**
 - G-03: integration tests need `supabase start` from human
 - Icon PNG assets (icon-192, icon-512) — need real PNG files for PWA installability
+
+**Week 3 — COMPLETED 2026-04-24 (Phase 3: Installment Generation + Credit/Installment UI):**
+- Backend: `should_generate_installment()`, `generate_installment()`, `run_daily_installment_job()` added to `backend/app/services/installment_service.py`
+- Backend: `backend/scripts/run_installment_job.py` — daily cron script using SUPABASE_SERVICE_KEY (service role)
+- Backend: `GET /credits/{credit_id}/installments` endpoint added to `backend/app/routes/credit_router.py`
+- Frontend: 4 new components — `MoraAlert`, `CreditForm`, `InstallmentView`, `ActiveCredits` in `frontend/src/components/credits/`
+- Frontend: `creditApi.ts` + `installmentApi.ts` re-export files in `frontend/src/store/api/`
+- Tests: 22 backend unit tests (test_installment_generation_cron.py + test_installment_locked_values.py)
+- Tests: 32 frontend unit tests across 4 component test files
+- Infrastructure: `frontend/src/vitest.setup.ts` + vitest config in `vite.config.ts`
+- QA gate: `.github/qa/week-3-gate.md` written
+- Spec: Phase 3 checkboxes marked with verified file paths + `updated: 2026-04-24`
+- PENDING-HUMAN: pytest run, vitest run, live Supabase cron validation
+
+**Week 4 — COMPLETED 2026-04-24 (Phase 4: Payment Processing TDD):**
+- Contract: `.github/specs/payment-contract.md` — wire format, allocation algorithm, Pydantic schemas
+- Models: `backend/app/models/payment_model.py` refactored — Decimal, PaymentResponse, PaymentPreviewResponse, AppliedToEntry, UpdatedCreditSnapshot
+- Service: `backend/app/services/payment_service.py` — _compute_breakdown (pure Decimal), process_payment (structured response), preview_payment_breakdown (zero writes), optimistic lock FIX (Week 2 risk #3 closed)
+- Router: `backend/app/routes/payment_router.py` — 201/200/409/400/422/403
+- Tests (50 cases, mocked DB): conftest_payment.py + 10 test files (mandatory_order, partial_application, overpayment, boundary_conditions, multi_installment, atomicity, optimistic_locking_retry, preview, installment_status_transitions, pending_capital_update)
+- Frontend: `frontend/src/components/PaymentForm.tsx` — preview-before-submit, breakdown table, 409 error
+- Frontend: `frontend/src/components/__tests__/PaymentForm.test.tsx` — 9 tests (Vitest + testing-library)
+- Types: PaymentResponse, UpdatedCreditSnapshot added to `frontend/src/types/index.ts`
+- apiSlice: operator_id in processPayment, Decimal string amounts
+- QA gate: `.github/qa/week-4-gate.md`
+- Spec: v2.2, Phase 4 checkboxes marked
+- PENDING-HUMAN: `pytest backend/tests/test_payment_*.py` + `npm test PaymentForm` — not run yet
+- Week 2 risk #3 (silent optimistic-lock gap): FIXED in payment_service.py

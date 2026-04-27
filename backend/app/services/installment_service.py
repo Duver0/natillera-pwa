@@ -16,6 +16,82 @@ REMAINING_PERIODS_DEFAULT = 12  # fallback when credit has no term set
 
 class InstallmentService(BaseService):
 
+    def should_generate_installment(self, credit: dict) -> bool:
+        """
+        Return True if the credit is eligible for a new installment today.
+
+        Conditions (all must be True):
+          - status == ACTIVE
+          - mora == False
+          - pending_capital > 0
+          - next_period_date <= today
+        """
+        if credit.get("status") != "ACTIVE":
+            return False
+        if credit.get("mora", False):
+            return False
+        if float(credit.get("pending_capital", 0)) <= 0:
+            return False
+        next_period_str = credit.get("next_period_date")
+        if not next_period_str:
+            return False
+        next_period = date.fromisoformat(next_period_str)
+        return next_period <= date.today()
+
+    async def generate_installment(self, credit_id: UUID) -> dict:
+        """
+        Public alias used by the daily cron job.
+        Delegates to generate_next(); re-raises ValueError with credit context.
+        """
+        try:
+            return await self.generate_next(credit_id)
+        except ValueError as exc:
+            raise ValueError(f"Credit {credit_id}: {exc}") from exc
+
+    async def run_daily_installment_job(self) -> dict:
+        """
+        System-level daily job: find all ACTIVE, non-mora credits whose
+        next_period_date is today or in the past, and generate one installment
+        for each.
+
+        This method does NOT filter by user_id — it operates across all users.
+        It should be called with a service-role Supabase client to bypass RLS.
+
+        Returns a summary dict:
+          {"processed": <int>, "errors": [{"credit_id": ..., "error": ...}, ...]}
+        """
+        today = date.today().isoformat()
+
+        result = await (
+            self.db.table("credits")
+            .select("id,user_id")
+            .eq("status", "ACTIVE")
+            .eq("mora", False)
+            .lte("next_period_date", today)
+            .execute()
+        )
+        credits = result.data or []
+
+        processed = 0
+        errors: list = []
+
+        for credit_row in credits:
+            credit_id = UUID(credit_row["id"])
+            # Temporarily adopt the credit owner's user_id so ownership checks
+            # in generate_next() pass. The caller uses a service-role client so
+            # RLS is bypassed at the DB level.
+            original_user_id = self.user_id
+            self.user_id = credit_row["user_id"]
+            try:
+                await self.generate_next(credit_id)
+                processed += 1
+            except Exception as exc:
+                errors.append({"credit_id": str(credit_id), "error": str(exc)})
+            finally:
+                self.user_id = original_user_id
+
+        return {"processed": processed, "errors": errors}
+
     async def generate_next(self, credit_id: UUID) -> dict:
         """
         Generate a single installment with LOCKED values.

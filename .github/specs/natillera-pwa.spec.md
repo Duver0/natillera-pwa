@@ -1,13 +1,15 @@
 ---
 id: SPEC-001
 status: IN_PROGRESS
-version: "2.1"
+version: "2.2"
 feature: natillera-pwa
 created: 2026-04-23
-updated: 2026-04-23
+updated: 2026-04-24
 author: spec-generator
-related-specs: []
+related-specs:
+  - .github/specs/payment-contract.md
 week-2-completed: 2026-04-23
+week-4-started: 2026-04-24
 ---
 
 # Natillera PWA — Personal Loans + Savings Management (REFACTORED v2.0)
@@ -835,41 +837,53 @@ natillera-pwa/
   - [ ] test_mora_fresh_on_read.py
 
 #### Phase 3: Installment Generation (Week 3)
-- [ ] Setup daily cron job (or event-driven) for installment generation
-- [ ] Logic: For each ACTIVE credit with mora=false, if next_period_date <= today:
-  - [ ] interest = pending_capital * (rate / periods_per_year)
-  - [ ] principal = pending_capital / remaining_periods (estimated)
-  - [ ] Create installment with expected_date = next_period_date + period_offset
-  - [ ] Increment next_period_date
-- [ ] Tests:
-  - [ ] test_installment_generation_cron.py
-  - [ ] test_installment_locked_values.py
+- [x] Setup daily cron job — `backend/scripts/run_installment_job.py` (cron script chosen over background task; uses SUPABASE_SERVICE_KEY service role) — verified: 2026-04-24
+- [x] `should_generate_installment()` — verified: `backend/app/services/installment_service.py` 2026-04-24
+- [x] `generate_installment()` alias — verified: `backend/app/services/installment_service.py` 2026-04-24
+- [x] `run_daily_installment_job()` — per-credit error isolation, batch result summary — verified: `backend/app/services/installment_service.py` 2026-04-24
+- [x] Logic: ACTIVE + mora=False + pending_capital>0 + next_period_date<=today → generate — verified: 2026-04-24
+- [x] `GET /credits/:id/installments` endpoint — verified: `backend/app/routes/credit_router.py` 2026-04-24
+- [x] Tests:
+  - [x] test_installment_generation_cron.py — 10 tests — verified: `backend/tests/` 2026-04-24
+  - [x] test_installment_locked_values.py — 12 tests — verified: `backend/tests/` 2026-04-24
 
-#### Phase 4: Payment Processing (Week 4)
-- [ ] Implement PaymentService with ATOMIC transactions:
-  - [ ] process_payment(credit_id, amount, operator_id):
-    1. Fetch credit (check version for optimistic lock)
-    2. Query all unpaid installments sorted by expected_date
-    3. Apply payment in mandatory order:
-       - Overdue interest (sum of interest_portion where is_overdue)
-       - Overdue principal (sum of principal_portion where is_overdue)
-       - Future principal (reduce pending_capital)
-    4. Update installments (paid_value, status, is_overdue)
-    5. Update credit (pending_capital, version++, mora recalc)
-    6. Create Payment record with applied_to breakdown
-    7. Create FinancialHistory event
-    8. All in single transaction or rollback
-  - [ ] Optimistic locking: on UPDATE credit, check version match
-- [ ] Payment endpoints:
-  - [ ] POST /payments (register payment)
-  - [ ] GET /payments (list, paginated)
-  - [ ] GET /payments?credit_id=X
-- [ ] Tests:
-  - [ ] test_payment_mandatory_order.py
-  - [ ] test_payment_partial_application.py
-  - [ ] test_payment_overpayment.py
-  - [ ] test_payment_atomicity.py (rollback on error)
-  - [ ] test_optimistic_locking_retry.py
+#### Phase 4: Payment Processing (Week 4) — IMPLEMENTED 2026-04-24
+- [x] Payment contract documented — `.github/specs/payment-contract.md` — 2026-04-24
+- [x] Pydantic schemas refactored to Decimal — `backend/app/models/payment_model.py` — 2026-04-24
+  - [x] PaymentRequest (operator_id required, Decimal amount)
+  - [x] PaymentResponse (payment_id, total_amount, applied_to with installment_id, updated_credit_snapshot)
+  - [x] PaymentPreviewResponse (same minus payment_id, plus unallocated, version unchanged)
+  - [x] AppliedToEntry, UpdatedCreditSnapshot
+- [x] Implement PaymentService — `backend/app/services/payment_service.py` — 2026-04-24
+  - [x] `_compute_breakdown()` pure allocation function (Decimal, ROUND_HALF_EVEN)
+  - [x] `process_payment()` → structured PaymentResponse dict
+  - [x] `preview_payment_breakdown()` → zero writes, same breakdown shape
+  - [x] Optimistic locking: 0-row update → HTTPException(409) — FIXES Week 2 risk #3
+  - [x] Installment locked fields untouched (only paid_value, status, is_overdue, paid_at)
+  - [x] `_compute_installment_new_states()` helper separates state from allocation
+- [x] Payment endpoints — `backend/app/routes/payment_router.py` — 2026-04-24
+  - [x] POST /payments → 201 PaymentResponse
+  - [x] POST /payments/preview → 200 PaymentPreviewResponse
+  - [x] GET /payments?credit_id=X (list)
+  - [x] 409 on version conflict, 400 on non-ACTIVE credit, 422 validation, 403 ownership
+- [x] Tests (50 test cases, mocked DB) — 2026-04-24
+  - [x] `backend/tests/test_payment_mandatory_order.py` — 6 tests
+  - [x] `backend/tests/test_payment_partial_application.py` — 5 tests
+  - [x] `backend/tests/test_payment_overpayment.py` — 5 tests
+  - [x] `backend/tests/test_payment_boundary_conditions.py` — 6 tests
+  - [x] `backend/tests/test_payment_multi_installment.py` — 4 tests
+  - [x] `backend/tests/test_payment_atomicity.py` — 3 tests
+  - [x] `backend/tests/test_optimistic_locking_retry.py` — 4 tests
+  - [x] `backend/tests/test_payment_preview.py` — 7 tests
+  - [x] `backend/tests/test_payment_installment_status_transitions.py` — 5 tests
+  - [x] `backend/tests/test_payment_pending_capital_update.py` — 5 tests
+- [x] Frontend minimal integration — 2026-04-24
+  - [x] `PaymentForm` component — `frontend/src/components/PaymentForm.tsx`
+  - [x] Preview before submit, breakdown display (installment_id, type, amount)
+  - [x] 409 conflict error handling
+  - [x] RTK Query updated: `usePreviewPaymentMutation`, `useProcessPaymentMutation` with operator_id
+  - [x] Types updated: `PaymentResponse`, `PaymentPreviewResponse`, `UpdatedCreditSnapshot`
+  - [x] `frontend/src/components/__tests__/PaymentForm.test.tsx` — 9 tests
 
 #### Phase 5: Savings + History (Week 4-5)
 - [ ] Implement SavingsService:
@@ -933,17 +947,20 @@ natillera-pwa/
 - [ ] Setup RTK Query clientApi
 
 #### Phase 3: Credit + Installment UI (Week 3)
-- [ ] CreditForm modal:
-  - [ ] Fields: initial_capital, periodicity dropdown, annual_interest_rate, start_date
-  - [ ] Submit → POST /credits
-- [ ] ActiveCredits tab:
-  - [ ] List credits (status, pending_capital, next_installment)
-  - [ ] Mora indicator (red badge if mora=true)
-  - [ ] Click → expand installments (show next 3)
-- [ ] InstallmentView:
-  - [ ] List with period_number, expected_date, expected_value, paid_value, status
-  - [ ] Filter: upcoming, paid, overdue
-- [ ] MoraAlert component (informational, no penalty)
+- [x] CreditForm modal — verified: `frontend/src/components/credits/CreditForm.tsx` 2026-04-24
+  - [x] Fields: initial_capital, periodicity dropdown, annual_interest_rate, start_date
+  - [x] Zod + React Hook Form validation
+  - [x] Submit → POST /credits via useCreateCreditMutation
+- [x] ActiveCredits tab — verified: `frontend/src/components/credits/ActiveCredits.tsx` 2026-04-24
+  - [x] List credits (status, pending_capital, next_installment)
+  - [x] Mora indicator (red badge if mora=true)
+  - [x] Click → expand installments (show next 3)
+- [x] InstallmentView — verified: `frontend/src/components/credits/InstallmentView.tsx` 2026-04-24
+  - [x] List with period_number, expected_date, expected_value, paid_value, status
+  - [x] Filter: upcoming, paid, overdue (client-side)
+- [x] MoraAlert component (informational, no penalty) — verified: `frontend/src/components/credits/MoraAlert.tsx` 2026-04-24
+- [x] RTK Query creditApi — verified: `frontend/src/store/api/creditApi.ts` 2026-04-24
+- [x] RTK Query installmentApi — verified: `frontend/src/store/api/installmentApi.ts` 2026-04-24
 
 #### Phase 4: Payment Processing (Week 4)
 - [ ] PaymentForm modal:

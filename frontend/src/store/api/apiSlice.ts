@@ -10,6 +10,7 @@ import type {
   HistoryEvent,
   ClientSummary,
   PaymentPreview,
+  PaymentResponse,
 } from '../../types'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -106,11 +107,16 @@ export const apiSlice = createApi({
       providesTags: ['Installment'],
     }),
 
-    // PAYMENTS
-    previewPayment: builder.mutation<PaymentPreview, { credit_id: string; amount: number }>({
+    // PAYMENTS — Phase 4 contract (payment-contract.md)
+    previewPayment: builder.mutation<PaymentPreview, { credit_id: string; amount: string }>({
       query: (body) => ({ url: '/payments/preview', method: 'POST', body }),
     }),
-    processPayment: builder.mutation<Payment, { credit_id: string; amount: number; notes?: string }>({
+    processPayment: builder.mutation<PaymentResponse, {
+      credit_id: string
+      amount: string
+      operator_id: string
+      notes?: string
+    }>({
       query: (body) => ({ url: '/payments', method: 'POST', body }),
       invalidatesTags: ['Credit', 'Installment', 'Payment', 'History'],
     }),

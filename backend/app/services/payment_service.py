@@ -1,215 +1,237 @@
+"""
+PaymentService — P0 Remediation (2026-04-24).
+Contract: .github/specs/payment-contract.md
+
+Architecture after remediation:
+- process_payment()           → thin wrapper: calls process_payment_atomic RPC (single txn)
+- preview_payment_breakdown() → pure, zero writes, uses corrected 3-pool global logic
+- All allocation / locking / mora logic lives in SQL (003_payment_atomic_rpc.sql)
+
+CF-1 resolved: single RPC call = single PostgreSQL transaction
+CF-2 resolved: optimistic lock inside RPC — installments only written after lock acquired
+CF-3 resolved: 3-pool global allocation enforced in SQL and mirrored in preview
+CF-4 resolved: mora_since set to MIN(expected_date) of remaining overdue in RPC
+CF-5 resolved: idempotency_key forwarded to RPC; cached 200 returned on hit
+
+Rules:
+- Decimal everywhere, ROUND_HALF_EVEN, no float
+- LOCKED installment fields (expected_value, principal_portion, interest_portion, expected_date) NEVER written
+- Single RPC call per payment — no extra Python round-trips for core logic
+"""
 from uuid import UUID
 from datetime import date
-from decimal import Decimal
-from typing import List
+from decimal import Decimal, ROUND_HALF_EVEN
+from typing import List, Optional
+
+from fastapi import HTTPException
 
 from app.services.base_service import BaseService
-from app.models.payment_model import PaymentRequest
+from app.models.payment_model import (
+    PaymentRequest,
+    AppliedToEntry,
+    UpdatedCreditSnapshot,
+    PaymentResponse,
+    PaymentPreviewResponse,
+)
+
+
+class VersionConflict(Exception):
+    """Raised when RPC reports VersionConflict (SQLSTATE P0001)."""
+
+
+def _decimal(value) -> Decimal:
+    """Convert any value to Decimal with ROUND_HALF_EVEN and 2 decimal places."""
+    d = Decimal(str(value))
+    return d.quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN)
+
+
+def _compute_breakdown_3pool(
+    installments: list,
+    amount: Decimal,
+    today: date,
+) -> tuple[List[AppliedToEntry], Decimal, Decimal]:
+    """
+    3-pool global allocation algorithm (mirrors SQL RPC logic exactly).
+    Used exclusively by preview_payment_breakdown — ZERO DB writes.
+
+    Algorithm (CF-3 compliant):
+      PASS 1 — collect global pool totals across ALL installments
+      PASS 2 — distribute per-installment FIFO within each pool
+
+    Returns:
+        (applied_entries, total_principal_applied, remaining_after)
+    """
+    # ----------------------------------------------------------------
+    # PASS 1: Aggregate global pools
+    # ----------------------------------------------------------------
+    pool_overdue_interest: Decimal = Decimal("0.00")
+    pool_overdue_principal: Decimal = Decimal("0.00")
+    pool_future_principal: Decimal = Decimal("0.00")
+
+    for inst in installments:
+        inst_paid     = _decimal(inst["paid_value"])
+        inst_expected = _decimal(inst["expected_value"])
+        inst_interest = _decimal(inst["interest_portion"])
+        expected_date = date.fromisoformat(inst["expected_date"])
+        is_overdue    = expected_date < today and inst.get("status") != "PAID"
+
+        if is_overdue:
+            # Interest still unpaid by this installment
+            already_to_interest  = min(inst_paid, inst_interest)
+            interest_owed        = inst_interest - already_to_interest
+            # Principal still unpaid (from paid_value beyond interest portion)
+            principal_owed       = max(Decimal("0.00"), inst_expected - max(inst_paid, inst_interest))
+
+            pool_overdue_interest  += max(Decimal("0.00"), interest_owed)
+            pool_overdue_principal += max(Decimal("0.00"), principal_owed)
+        elif inst.get("status") != "PAID":
+            future_owed = max(Decimal("0.00"), inst_expected - inst_paid)
+            pool_future_principal += future_owed
+
+    # ----------------------------------------------------------------
+    # PASS 1b: Consume payment against global pools (strict order)
+    # ----------------------------------------------------------------
+    remaining = amount
+
+    applied_interest  = min(remaining, pool_overdue_interest)
+    remaining        -= applied_interest
+
+    applied_principal = min(remaining, pool_overdue_principal)
+    remaining        -= applied_principal
+
+    applied_future    = min(remaining, pool_future_principal)
+    remaining        -= applied_future
+
+    total_principal = applied_principal + applied_future
+
+    # ----------------------------------------------------------------
+    # PASS 2: Distribute per-installment FIFO within each pool
+    # Mirrors SQL loop so preview output == RPC output exactly.
+    # ----------------------------------------------------------------
+    applied: List[AppliedToEntry] = []
+    pool1_left = applied_interest
+    pool2_left = applied_principal
+    pool3_left = applied_future
+
+    for inst in installments:
+        if pool1_left <= Decimal("0.00") and pool2_left <= Decimal("0.00") and pool3_left <= Decimal("0.00"):
+            break
+
+        inst_paid     = _decimal(inst["paid_value"])
+        inst_expected = _decimal(inst["expected_value"])
+        inst_interest = _decimal(inst["interest_portion"])
+        expected_date = date.fromisoformat(inst["expected_date"])
+        is_overdue    = expected_date < today and inst.get("status") != "PAID"
+
+        if is_overdue:
+            already_to_interest = min(inst_paid, inst_interest)
+            interest_owed       = max(Decimal("0.00"), inst_interest - already_to_interest)
+            principal_owed      = max(Decimal("0.00"), inst_expected - max(inst_paid, inst_interest))
+
+            if pool1_left > Decimal("0.00") and interest_owed > Decimal("0.00"):
+                take = min(pool1_left, interest_owed)
+                pool1_left -= take
+                applied.append(AppliedToEntry(
+                    installment_id=inst["id"],
+                    type="OVERDUE_INTEREST",
+                    amount=take,
+                ))
+
+            if pool2_left > Decimal("0.00") and principal_owed > Decimal("0.00"):
+                take = min(pool2_left, principal_owed)
+                pool2_left -= take
+                applied.append(AppliedToEntry(
+                    installment_id=inst["id"],
+                    type="OVERDUE_PRINCIPAL",
+                    amount=take,
+                ))
+        elif inst.get("status") != "PAID":
+            future_owed = max(Decimal("0.00"), inst_expected - inst_paid)
+            if pool3_left > Decimal("0.00") and future_owed > Decimal("0.00"):
+                take = min(pool3_left, future_owed)
+                pool3_left -= take
+                applied.append(AppliedToEntry(
+                    installment_id=inst["id"],
+                    type="FUTURE_PRINCIPAL",
+                    amount=take,
+                ))
+
+    return applied, total_principal, remaining
 
 
 class PaymentService(BaseService):
 
     async def process_payment(self, body: PaymentRequest) -> dict:
         """
-        Apply payment in MANDATORY order:
-        1. Overdue interest (interest_portion where is_overdue = true)
-        2. Overdue principal (principal_portion where is_overdue = true)
-        3. Future principal (remaining unpaid upcoming installments)
+        Thin wrapper — delegates ALL allocation, locking, and persistence to
+        process_payment_atomic PostgreSQL RPC (single atomic transaction).
 
-        All steps must succeed atomically.
-        Uses optimistic locking via credit.version.
+        CF-1: atomicity guaranteed by SQL transaction
+        CF-2: optimistic lock acquired inside RPC before any writes
+        CF-3: 3-pool global allocation in SQL
+        CF-4: mora_since computed correctly in SQL
+        CF-5: idempotency_key forwarded to RPC; cached 200 on hit
+
+        On idempotent hit  → return cached response as 200 (not 409)
+        On VersionConflict → raise HTTPException 409
+        On CreditNotFound  → raise HTTPException 403
+        On CreditClosed    → raise HTTPException 400
+        On AmountInvalid   → raise HTTPException 400
         """
-        credit_id = str(body.credit_id)
-        operator_id = self.user_id
+        try:
+            rpc_result = await self.db.rpc(
+                "process_payment_atomic",
+                {
+                    "p_credit_id":        str(body.credit_id),
+                    "p_amount":           str(_decimal(body.amount)),
+                    "p_operator_id":      body.operator_id,
+                    "p_idempotency_key":  str(body.idempotency_key) if body.idempotency_key else None,
+                }
+            ).execute()
+        except Exception as exc:
+            exc_str = str(exc)
+            if "VersionConflict" in exc_str or "P0001" in exc_str:
+                raise HTTPException(status_code=409, detail="credit_version_conflict_retry")
+            if "CreditNotFound" in exc_str or "P0004" in exc_str:
+                raise HTTPException(status_code=403, detail="credit_not_found")
+            if "CreditClosed" in exc_str or "P0002" in exc_str:
+                raise HTTPException(status_code=400, detail="credit_not_active")
+            if "AmountInvalid" in exc_str or "P0003" in exc_str:
+                raise HTTPException(status_code=400, detail="amount_invalid")
+            raise
 
-        # Fetch credit with ownership check
-        credit_result = await (
-            self.db.table("credits")
-            .select("*")
-            .eq("id", credit_id)
-            .eq("user_id", self.user_id)
-            .single()
-            .execute()
-        )
-        if not credit_result.data:
-            self._raise_forbidden("credit")
-        credit = credit_result.data
+        data = rpc_result.data
+        if not data:
+            raise HTTPException(status_code=500, detail="rpc_no_response")
 
-        if credit["status"] != "ACTIVE":
-            raise ValueError("Cannot process payment on non-ACTIVE credit")
-
-        # Fetch all unpaid installments sorted by expected_date ASC
-        installments_result = await (
-            self.db.table("installments")
-            .select("*")
-            .eq("credit_id", credit_id)
-            .in_("status", ["UPCOMING", "PARTIALLY_PAID"])
-            .order("expected_date")
-            .execute()
-        )
-        installments = installments_result.data or []
-
-        today = date.today()
-        # Recalculate is_overdue in-memory
-        for inst in installments:
-            inst["is_overdue"] = date.fromisoformat(inst["expected_date"]) < today
-
-        remaining = Decimal(str(body.amount))
-        applied_breakdown: List[dict] = []
-        updated_installments: List[dict] = []
-
-        for inst in installments:
-            if remaining <= Decimal("0"):
-                break
-
-            inst_paid = Decimal(str(inst["paid_value"]))
-            inst_expected = Decimal(str(inst["expected_value"]))
-            inst_interest = Decimal(str(inst["interest_portion"]))
-            inst_principal = Decimal(str(inst["principal_portion"]))
-            remaining_owed = inst_expected - inst_paid
-
-            if remaining_owed <= Decimal("0"):
-                continue
-
-            if inst["is_overdue"]:
-                # Step 1: overdue interest
-                interest_unpaid = max(Decimal("0"), inst_interest - max(Decimal("0"), inst_paid))
-                if interest_unpaid > Decimal("0"):
-                    applied = min(remaining, interest_unpaid)
-                    remaining -= applied
-                    inst_paid += applied
-                    applied_breakdown.append({
-                        "type": "OVERDUE_INTEREST",
-                        "amount": float(applied),
-                        "installment_id": inst["id"],
-                    })
-
-                # Step 2: overdue principal
-                if remaining > Decimal("0"):
-                    principal_unpaid = max(Decimal("0"), inst_expected - inst_paid)
-                    applied = min(remaining, principal_unpaid)
-                    remaining -= applied
-                    inst_paid += applied
-                    applied_breakdown.append({
-                        "type": "OVERDUE_PRINCIPAL",
-                        "amount": float(applied),
-                        "installment_id": inst["id"],
-                    })
-            else:
-                # Step 3: future principal
-                future_unpaid = inst_expected - inst_paid
-                if future_unpaid > Decimal("0") and remaining > Decimal("0"):
-                    applied = min(remaining, future_unpaid)
-                    remaining -= applied
-                    inst_paid += applied
-                    applied_breakdown.append({
-                        "type": "FUTURE_PRINCIPAL",
-                        "amount": float(applied),
-                        "installment_id": inst["id"],
-                    })
-
-            # Determine new status
-            if inst_paid >= inst_expected:
-                new_status = "PAID"
-                paid_at = today.isoformat()
-            elif inst_paid > Decimal("0"):
-                new_status = "PARTIALLY_PAID"
-                paid_at = None
-            else:
-                new_status = inst["status"]
-                paid_at = None
-
-            updated_installments.append({
-                "id": inst["id"],
-                "paid_value": float(inst_paid),
-                "status": new_status,
-                "paid_at": paid_at,
-                "is_overdue": inst["is_overdue"] and new_status != "PAID",
-            })
-
-        # Persist installment updates
-        for upd in updated_installments:
-            inst_id = upd.pop("id")
-            await (
-                self.db.table("installments")
-                .update(upd)
-                .eq("id", inst_id)
-                .execute()
-            )
-
-        # Calculate principal applied
-        principal_applied = sum(
-            b["amount"] for b in applied_breakdown
-            if b["type"] in ("OVERDUE_PRINCIPAL", "FUTURE_PRINCIPAL")
-        )
-        new_pending_capital = float(credit["pending_capital"]) - principal_applied
-        new_pending_capital = max(0.0, new_pending_capital)
-
-        # Recalculate mora after payment
-        post_overdue_result = await (
-            self.db.table("installments")
-            .select("id")
-            .eq("credit_id", credit_id)
-            .in_("status", ["UPCOMING", "PARTIALLY_PAID"])
-            .lt("expected_date", today.isoformat())
-            .execute()
-        )
-        mora_after = len(post_overdue_result.data or []) > 0
-
-        # Auto-close if pending_capital reaches zero
-        new_status = "CLOSED" if new_pending_capital <= 0 else credit["status"]
-
-        await (
-            self.db.table("credits")
-            .update({
-                "pending_capital": new_pending_capital,
-                "mora": mora_after,
-                "mora_since": None if not mora_after else credit.get("mora_since"),
-                "version": credit["version"] + 1,
-                "status": new_status,
-            })
-            .eq("id", credit_id)
-            .eq("version", credit["version"])  # optimistic lock
-            .execute()
-        )
-
-        payment_date = (body.payment_date or today).isoformat()
-        payment_payload = {
-            "user_id": self.user_id,
-            "credit_id": credit_id,
-            "amount": float(body.amount),
-            "payment_date": payment_date,
-            "applied_to": applied_breakdown,
-            "notes": body.notes,
-            "recorded_by": operator_id,
-        }
-        payment_result = await self.db.table("payments").insert(payment_payload).execute()
-        payment = payment_result.data[0]
-
-        # History event
-        await self.db.table("financial_history").insert({
-            "user_id": self.user_id,
-            "event_type": "PAYMENT_RECORDED",
-            "client_id": credit["client_id"],
-            "credit_id": credit_id,
-            "amount": float(body.amount),
-            "description": f"Payment of {body.amount} processed",
-            "metadata": {
-                "payment_id": payment["id"],
-                "total_amount": float(body.amount),
-                "applied_to": applied_breakdown,
+        # Idempotent hit → return cached result as 200 (no new payment created)
+        # Caller gets the same response shape regardless of idempotent or not
+        snapshot = data["updated_credit_snapshot"]
+        return {
+            "payment_id": data["payment_id"],
+            "credit_id":  data["credit_id"],
+            "total_amount": data["total_amount"],
+            "applied_to": data["applied_to"],
+            "updated_credit_snapshot": {
+                "pending_capital": snapshot["pending_capital"],
+                "mora":            snapshot["mora"],
+                "version":         snapshot["version"],
             },
-            "operator_id": operator_id,
-        }).execute()
+            # Internal flag — router may use for 200 vs 201 decision on idempotent hit
+            "_idempotent": data.get("idempotent", False),
+        }
 
-        return payment
-
-    async def preview_payment(self, credit_id: UUID, amount: float) -> dict:
+    async def preview_payment_breakdown(
+        self, credit_id, amount: Decimal
+    ) -> dict:
         """
-        Dry-run: compute allocation breakdown WITHOUT persisting anything.
-        Reuses the same allocation logic as process_payment.
+        Pure computation — ZERO DB writes.
+        Uses corrected 3-pool global allocation (CF-3 compliant).
+        Output matches RPC output exactly for same input.
+        Contract: .github/specs/payment-contract.md §2
         """
         credit_id_str = str(credit_id)
+        amount = _decimal(amount)
 
         credit_result = await (
             self.db.table("credits")
@@ -219,12 +241,12 @@ class PaymentService(BaseService):
             .single()
             .execute()
         )
-        if not credit_result.data:
-            self._raise_forbidden("credit")
         credit = credit_result.data
+        if not credit:
+            self._raise_forbidden("credit")
 
         if credit["status"] != "ACTIVE":
-            raise ValueError("Cannot preview payment on non-ACTIVE credit")
+            raise HTTPException(status_code=400, detail="credit_not_active")
 
         installments_result = await (
             self.db.table("installments")
@@ -237,65 +259,67 @@ class PaymentService(BaseService):
         installments = installments_result.data or []
 
         today = date.today()
+        applied_entries, total_principal_applied, remaining_after = _compute_breakdown_3pool(
+            installments, amount, today
+        )
+
+        pending_capital = _decimal(credit["pending_capital"])
+        projected_capital = max(Decimal("0.00"), pending_capital - total_principal_applied)
+
+        # Excess beyond installments reduces capital (same rule as process_payment)
+        unallocated = Decimal("0.00")
+        if remaining_after > Decimal("0.00"):
+            excess_to_capital = min(remaining_after, projected_capital)
+            projected_capital = max(Decimal("0.00"), projected_capital - excess_to_capital)
+            unallocated = remaining_after - excess_to_capital
+
+        # Mora projection: any overdue installment not fully cleared by this payment?
+        applied_by_inst: dict[str, Decimal] = {}
+        for e in applied_entries:
+            key = str(e.installment_id)
+            applied_by_inst[key] = applied_by_inst.get(key, Decimal("0.00")) + e.amount
+
+        mora_projected = False
+        mora_since_projected: Optional[date] = None
         for inst in installments:
-            inst["is_overdue"] = date.fromisoformat(inst["expected_date"]) < today
-
-        remaining = Decimal(str(amount))
-        applied_breakdown: List[dict] = []
-
-        for inst in installments:
-            if remaining <= Decimal("0"):
-                break
-
-            inst_paid = Decimal(str(inst["paid_value"]))
-            inst_expected = Decimal(str(inst["expected_value"]))
-            inst_interest = Decimal(str(inst["interest_portion"]))
-            remaining_owed = inst_expected - inst_paid
-
-            if remaining_owed <= Decimal("0"):
+            inst_id = inst["id"]
+            expected_date = date.fromisoformat(inst["expected_date"])
+            if expected_date >= today or inst.get("status") == "PAID":
                 continue
+            paid_so_far  = _decimal(inst["paid_value"])
+            additionally = applied_by_inst.get(inst_id, Decimal("0.00"))
+            total_paid   = paid_so_far + additionally
+            if total_paid < _decimal(inst["expected_value"]):
+                mora_projected = True
+                if mora_since_projected is None or expected_date < mora_since_projected:
+                    mora_since_projected = expected_date
 
-            if inst["is_overdue"]:
-                interest_unpaid = max(Decimal("0"), inst_interest - max(Decimal("0"), inst_paid))
-                if interest_unpaid > Decimal("0"):
-                    applied = min(remaining, interest_unpaid)
-                    remaining -= applied
-                    inst_paid += applied
-                    applied_breakdown.append({
-                        "type": "OVERDUE_INTEREST",
-                        "amount": float(applied),
-                        "installment_id": inst["id"],
-                    })
-
-                if remaining > Decimal("0"):
-                    principal_unpaid = max(Decimal("0"), inst_expected - inst_paid)
-                    applied = min(remaining, principal_unpaid)
-                    remaining -= applied
-                    applied_breakdown.append({
-                        "type": "OVERDUE_PRINCIPAL",
-                        "amount": float(applied),
-                        "installment_id": inst["id"],
-                    })
-            else:
-                future_unpaid = inst_expected - inst_paid
-                if future_unpaid > Decimal("0") and remaining > Decimal("0"):
-                    applied = min(remaining, future_unpaid)
-                    remaining -= applied
-                    applied_breakdown.append({
-                        "type": "FUTURE_PRINCIPAL",
-                        "amount": float(applied),
-                        "installment_id": inst["id"],
-                    })
+        applied_to_raw = [
+            {
+                "installment_id": str(e.installment_id),
+                "type": e.type,
+                "amount": str(e.amount),
+            }
+            for e in applied_entries
+        ]
 
         return {
             "credit_id": credit_id_str,
-            "amount": amount,
-            "applied_to": applied_breakdown,
-            "unallocated": float(remaining),
+            "total_amount": str(amount),
+            "applied_to": applied_to_raw,
+            "unallocated": str(unallocated),
+            "updated_credit_snapshot": {
+                "pending_capital": str(projected_capital),
+                "mora": mora_projected,
+                "version": credit["version"],  # unchanged — read-only preview
+            },
         }
 
+    async def preview_payment(self, credit_id: UUID, amount) -> dict:
+        """Alias for preview_payment_breakdown (legacy endpoint support)."""
+        return await self.preview_payment_breakdown(credit_id, _decimal(amount))
+
     async def list_payments(self, credit_id: UUID) -> list:
-        # Ownership check via credit
         credit_result = await (
             self.db.table("credits")
             .select("id")
