@@ -5,13 +5,11 @@ import {
   useGetClientQuery,
   useGetCreditsQuery,
   useGetCreditQuery,
-  useGetSavingsQuery,
-  useAddContributionMutation,
-  useLiquidateSavingsMutation,
   useGetHistoryQuery,
 } from '../store/api/apiSlice'
 import { PaymentModal } from '../components/PaymentModal'
-import { Credit } from '../types'
+import { SavingsView } from '../components/SavingsView'
+import type { Credit } from '../types'
 
 type Tab = 'credits' | 'savings' | 'history'
 
@@ -26,11 +24,7 @@ export function ClientDetailPage() {
   const { data: credits = [] } = useGetCreditsQuery({ client_id: clientId })
   // Fetch full credit detail (with aggregates) only when one is selected
   const { data: selectedCredit } = useGetCreditQuery(selectedCreditId!, { skip: !selectedCreditId })
-  const { data: savings = [] } = useGetSavingsQuery(clientId!, { skip: tab !== 'savings' })
   const { data: history = [] } = useGetHistoryQuery({ client_id: clientId }, { skip: tab !== 'history' })
-
-  const [addContribution] = useAddContributionMutation()
-  const [liquidate, { isLoading: liquidating }] = useLiquidateSavingsMutation()
 
   if (clientLoading) return <div className="p-8 text-center">Loading...</div>
   if (!client) return <div className="p-8 text-center text-red-500">Client not found</div>
@@ -184,30 +178,7 @@ export function ClientDetailPage() {
           />
         )}
 
-        {tab === 'savings' && (
-          <div>
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="font-semibold text-gray-800">Savings</h2>
-              <button
-                onClick={() => liquidate(clientId!)}
-                disabled={liquidating}
-                className="bg-yellow-500 text-white px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
-              >
-                {liquidating ? 'Liquidating...' : 'Liquidate'}
-              </button>
-            </div>
-            <ul className="space-y-2">
-              {savings.map((s) => (
-                <li key={s.id} className="bg-white rounded-xl shadow px-4 py-3 flex justify-between">
-                  <span className="text-sm text-gray-600">{s.contribution_date}</span>
-                  <span className={`text-sm font-medium ${s.status === 'LIQUIDATED' ? 'text-gray-400' : 'text-green-700'}`}>
-                    ${s.contribution_amount.toFixed(2)} — {s.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        {tab === 'savings' && <SavingsView clientId={clientId!} />}
 
         {tab === 'history' && (
           <div>

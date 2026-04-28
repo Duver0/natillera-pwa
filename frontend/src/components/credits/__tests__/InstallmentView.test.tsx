@@ -129,7 +129,7 @@ describe('InstallmentView', () => {
     } as ReturnType<typeof useGetInstallmentsQuery>)
 
     render(<InstallmentView creditId="credit-1" />)
-    expect(screen.getByText(/vencida/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/vencida/i)).toHaveLength(2)
   })
 
   it('shows empty state when no installments match filter', () => {

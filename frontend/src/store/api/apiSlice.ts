@@ -1,5 +1,6 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
+import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from '@reduxjs/toolkit/query/react'
 import type { RootState } from '../store'
+import { setUser, setTokens, clearAuth } from '../slices/authSlice'
 import type {
   Client,
   Credit,
@@ -15,18 +16,52 @@ import type {
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
+const rawBaseQuery = fetchBaseQuery({
+  baseUrl: `${BASE_URL}/api/v1`,
+  prepareHeaders: (headers, { getState }) => {
+    const token = (getState() as RootState).auth.tokens.accessToken
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`)
+    }
+    return headers
+  },
+})
+
+const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
+  args,
+  api,
+  extraOptions
+) => {
+  let result = await rawBaseQuery(args, api, extraOptions)
+
+  if (result.error?.status === 401) {
+    const refreshToken = (api.getState() as RootState).auth.tokens.refreshToken
+    if (refreshToken) {
+      const refreshResult = await rawBaseQuery(
+        { url: '/auth/refresh', method: 'POST', body: { refresh_token: refreshToken } },
+        api,
+        extraOptions
+      )
+
+      if (refreshResult.data) {
+        const data = refreshResult.data as { access_token: string; refresh_token: string; user: any }
+        api.dispatch(setUser(data.user))
+        api.dispatch(setTokens({ accessToken: data.access_token, refreshToken: data.refresh_token }))
+        result = await rawBaseQuery(args, api, extraOptions)
+      } else {
+        api.dispatch(clearAuth())
+      }
+    } else {
+      api.dispatch(clearAuth())
+    }
+  }
+
+  return result
+}
+
 export const apiSlice = createApi({
   reducerPath: 'api',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${BASE_URL}/api/v1`,
-    prepareHeaders: (headers, { getState }) => {
-      const token = (getState() as RootState).auth.tokens.accessToken
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`)
-      }
-      return headers
-    },
-  }),
+  baseQuery: baseQueryWithReauth,
   tagTypes: ['Client', 'Credit', 'Installment', 'Payment', 'Savings', 'History'],
   endpoints: (builder) => ({
     // AUTH

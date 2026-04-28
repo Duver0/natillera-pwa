@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { store } from './store/store'
+import { AppStartup } from './components/AppStartup'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { AppLayout } from './components/AppLayout'
 import { LoginPage } from './pages/LoginPage'
@@ -10,11 +11,13 @@ import { ClientDetailPage } from './pages/ClientDetailPage'
 import { ClientFormPage } from './pages/ClientFormPage'
 import { CreditFormPage } from './pages/CreditFormPage'
 import { ClientListPage } from './pages/ClientListPage'
+import { SavingsPage } from './pages/SavingsPage'
 
 export default function App() {
   return (
     <Provider store={store}>
       <BrowserRouter>
+        <AppStartup>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
@@ -61,6 +64,14 @@ export default function App() {
             }
           />
           <Route
+            path="/clients/:clientId/savings"
+            element={
+              <ProtectedRoute>
+                <SavingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/clients/:clientId"
             element={
               <ProtectedRoute>
@@ -70,6 +81,7 @@ export default function App() {
           />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </AppStartup>
       </BrowserRouter>
     </Provider>
   )

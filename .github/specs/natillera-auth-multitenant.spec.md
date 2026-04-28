@@ -1,9 +1,9 @@
 ---
 id: SPEC-002
-status: IN_PROGRESS
+status: IMPLEMENTED
 feature: natillera-auth-multitenant
 created: 2026-04-23
-updated: 2026-04-23
+updated: 2026-04-28
 author: spec-generator
 version: "1.0"
 related-specs:

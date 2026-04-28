@@ -36,6 +36,8 @@ export function useAuth() {
   const logout = useCallback(async () => {
     try {
       await logoutMutation().unwrap()
+    } catch {
+      // always clear local auth even if server call fails
     } finally {
       dispatch(clearAuth())
       navigate('/login')

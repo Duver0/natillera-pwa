@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useAppSelector } from '../hooks/useStore'
 import { usePreviewPaymentMutation, useProcessPaymentMutation } from '../store/api/apiSlice'
-import { PaymentPreview } from '../types'
+import type { PaymentPreview } from '../types'
 
 interface Props {
   creditId: string
@@ -14,6 +15,9 @@ export function PaymentModal({ creditId, onClose, onSuccess }: Props) {
   const [amount, setAmount] = useState('')
   const [preview, setPreview] = useState<PaymentPreview | null>(null)
   const [step, setStep] = useState<Step>('input')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const operatorId = useAppSelector((state) => state.auth.user?.id ?? 'unknown')
 
   const [previewPayment, { isLoading: previewing }] = usePreviewPaymentMutation()
   const [processPayment, { isLoading: processing }] = useProcessPaymentMutation()
@@ -21,16 +25,36 @@ export function PaymentModal({ creditId, onClose, onSuccess }: Props) {
   const handlePreview = async () => {
     const parsed = parseFloat(amount)
     if (!parsed || parsed <= 0) return
-    const result = await previewPayment({ credit_id: creditId, amount: parsed }).unwrap()
-    setPreview(result)
-    setStep('preview')
+    setErrorMsg(null)
+    try {
+      const result = await previewPayment({ credit_id: creditId, amount: parsed.toFixed(2) }).unwrap()
+      setPreview(result)
+      setStep('preview')
+    } catch (err: any) {
+      setErrorMsg(err?.data?.detail ?? 'Preview failed. Please try again.')
+    }
   }
 
   const handleConfirm = async () => {
+    if (!preview) return
     setStep('confirming')
-    await processPayment({ credit_id: creditId, amount: parseFloat(amount) })
-    onSuccess()
-    onClose()
+    setErrorMsg(null)
+    try {
+      await processPayment({
+        credit_id: creditId,
+        amount: preview.total_amount,
+        operator_id: operatorId,
+      }).unwrap()
+      onSuccess()
+      onClose()
+    } catch (err: any) {
+      setStep('preview')
+      if (err?.status === 409) {
+        setErrorMsg('Payment conflict: the credit was modified concurrently. Please retry.')
+      } else {
+        setErrorMsg(err?.data?.detail ?? 'Payment failed. Please try again.')
+      }
+    }
   }
 
   const typeLabel: Record<string, string> = {
@@ -74,6 +98,11 @@ export function PaymentModal({ creditId, onClose, onSuccess }: Props) {
             >
               {previewing ? 'Calculating...' : 'Preview Breakdown'}
             </button>
+            {errorMsg && (
+              <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg p-2">
+                {errorMsg}
+              </p>
+            )}
           </div>
         )}
 
@@ -87,16 +116,22 @@ export function PaymentModal({ creditId, onClose, onSuccess }: Props) {
               {preview.applied_to.map((item, i) => (
                 <div key={i} className="flex justify-between px-3 py-2 text-sm">
                   <span className="text-gray-700">{typeLabel[item.type] ?? item.type}</span>
-                  <span className="font-medium text-gray-900">${item.amount.toFixed(2)}</span>
+                  <span className="font-medium text-gray-900">${item.amount}</span>
                 </div>
               ))}
-              {preview.unallocated > 0 && (
+              {parseFloat(preview.unallocated) > 0 && (
                 <div className="flex justify-between px-3 py-2 text-sm text-amber-700">
                   <span>Unallocated</span>
-                  <span>${preview.unallocated.toFixed(2)}</span>
+                  <span>${preview.unallocated}</span>
                 </div>
               )}
             </div>
+
+            {errorMsg && (
+              <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg p-2">
+                {errorMsg}
+              </p>
+            )}
 
             <div className="flex gap-2">
               <button

@@ -44,7 +44,7 @@ describe('LoginPage', () => {
   it('renders email and password fields', () => {
     renderPage()
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
   })
 
   it('renders sign in button', () => {

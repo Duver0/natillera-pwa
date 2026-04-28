@@ -21,7 +21,7 @@ import { usePreviewPaymentMutation, useProcessPaymentMutation } from '../store/a
 
 const PREVIEW_RESPONSE = {
   credit_id: 'credit-1',
-  amount: 150,
+  total_amount: '150.00',
   applied_to: [
     { type: 'OVERDUE_INTEREST', amount: 50, installment_id: 'inst-1' },
     { type: 'OVERDUE_PRINCIPAL', amount: 100, installment_id: 'inst-1' },
@@ -73,7 +73,7 @@ describe('PaymentModal', () => {
     fireEvent.change(screen.getByTestId('payment-amount-input'), { target: { value: '150' } })
     fireEvent.click(screen.getByTestId('preview-btn'))
     await waitFor(() => {
-      expect(mockPreview).toHaveBeenCalledWith({ credit_id: 'credit-1', amount: 150 })
+      expect(mockPreview).toHaveBeenCalledWith({ credit_id: 'credit-1', amount: '150.00' })
     })
   })
 
@@ -95,7 +95,7 @@ describe('PaymentModal', () => {
     await waitFor(() => expect(screen.getByTestId('confirm-payment-btn')).toBeInTheDocument())
     fireEvent.click(screen.getByTestId('confirm-payment-btn'))
     await waitFor(() => {
-      expect(mockProcess).toHaveBeenCalledWith({ credit_id: 'credit-1', amount: 150 })
+      expect(mockProcess).toHaveBeenCalledWith({ credit_id: 'credit-1', amount: '150.00', operator_id: 'unknown' })
     })
   })
 

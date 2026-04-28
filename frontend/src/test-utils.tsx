@@ -4,20 +4,25 @@
 import React from 'react'
 import { render, type RenderOptions } from '@testing-library/react'
 import { Provider } from 'react-redux'
-import { configureStore } from '@reduxjs/toolkit'
+import { configureStore, createSlice } from '@reduxjs/toolkit'
 import { MemoryRouter } from 'react-router-dom'
-import { apiSlice } from './store/api/apiSlice'
 import authReducer from './store/slices/authSlice'
 import uiReducer from './store/slices/uiSlice'
+
+const mockApiSlice = createSlice({
+  name: 'api',
+  initialState: { queries: {}, mutations: {} },
+  reducers: {},
+})
 
 export function makeStore(preloadedState?: object) {
   return configureStore({
     reducer: {
       auth: authReducer,
       ui: uiReducer,
-      [apiSlice.reducerPath]: apiSlice.reducer,
+      [mockApiSlice.name]: mockApiSlice.reducer,
     },
-    middleware: (g) => g().concat(apiSlice.middleware),
+    middleware: (getDefaultMiddleware) => getDefaultMiddleware({ serializableCheck: false }),
     preloadedState,
   })
 }

@@ -1,10 +1,10 @@
 ---
 id: SPEC-001
-status: IN_PROGRESS
+status: IMPLEMENTED
 version: "2.2"
 feature: natillera-pwa
 created: 2026-04-23
-updated: 2026-04-24
+updated: 2026-04-28
 author: spec-generator
 related-specs:
   - .github/specs/payment-contract.md

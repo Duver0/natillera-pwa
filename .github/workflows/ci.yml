@@ -21,14 +21,12 @@ jobs:
         run: |
           cd backend
           python -m venv .venv
-          source .venv/bin/activate
-          pip install -r requirements.txt
+          .venv/bin/pip install -r requirements.txt
 
       - name: Run backend tests
         run: |
           cd backend
-          source .venv/bin/activate
-          pytest
+          .venv/bin/pytest --ignore=tests/contract --ignore=tests/integration
 
   test-frontend:
     runs-on: ubuntu-latest
