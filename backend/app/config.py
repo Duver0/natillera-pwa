@@ -11,12 +11,13 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
-    environment: Literal["local", "supabase", "production"] = "local"
+    environment: Literal["local", "production"] = "local"
     database_url: str = "postgresql://postgres:postgres@database:5432/postgres"
 
     supabase_url: str = ""
     supabase_key: str = ""
     supabase_anon_key: str = ""
+    supabase_service_role: str = ""
     supabase_jwt_secret: str = ""
 
     savings_rate: float = 10.0
@@ -26,6 +27,8 @@ class Settings(BaseSettings):
     def resolve_supabase_key(self):
         if not self.supabase_key and self.supabase_anon_key:
             self.supabase_key = self.supabase_anon_key
+        if not self.supabase_key and self.supabase_service_role:
+            self.supabase_key = self.supabase_service_role
         return self
 
 

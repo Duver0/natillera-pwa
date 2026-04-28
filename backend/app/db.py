@@ -290,6 +290,11 @@ async def init_local() -> LocalDatabase:
 
 async def init_supabase() -> SupabaseDatabase:
     settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_key:
+        raise RuntimeError(
+            "Supabase not configured. Set ENVIRONMENT=production and "
+            "SUPABASE_URL, SUPABASE_KEY environment variables."
+        )
     client = await create_supabase_client(settings.supabase_url, settings.supabase_key)
     return SupabaseDatabase(client)
 
@@ -301,7 +306,7 @@ def get_database() -> DatabaseInterface:
 
 
 def is_supabase() -> bool:
-    return get_settings().environment == "supabase"
+    return get_settings().environment == "production"
 
 
 async def close_database() -> None:
