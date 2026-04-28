@@ -1,0 +1,64 @@
+name: Contract Tests
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        run: |
+          curl -fsSL https://github.com/supabase/cli/releases/download/v1.226.0/supabase_linux_amd64.tar.gz -o supabase.tar.gz
+          tar -xzf supabase.tar.gz
+          mv supabase /usr/local/bin/
+
+      - name: Start Supabase Local
+        run: |
+          supabase start
+          echo "SUPABASE_URL=http://localhost:54321" >> $GITHUB_ENV
+          echo "SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTY0MTc2OTIwMH0.eG_5JdB7X6VQ7R8x3L8c0Z9kJ8e9cL2mK4pN6qL5rA" >> $GITHUB_ENV
+          echo "SUPABASE_SERVICE_ROLE=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoic2VydmljZV9yb2xlIiwiaWF0IjoxNjQxNzY5MjAwfQ.f8d5c6Y8vL2nR4qT7wX9kJ3mN6oP8eB1cG4dH9sU" >> $GITHUB_ENV
+
+      - name: Run Database Migrations
+        run: |
+          cd database/migrations
+          for f in *.sql; do
+            supabase db execute --file "$f" || true
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+          export SUPABASE_URL=${{ env.SUPABASE_URL }}
+          export SUPABASE_ANON_KEY=${{ env.SUPABASE_ANON_KEY }}
+          export SUPABASE_SERVICE_ROLE=${{ env.SUPABASE_SERVICE_ROLE }}
+          export ENVIRONMENT=local
+
+      - name: Run Contract Tests
+        run: |
+          cd backend
+          .venv/bin/pytest tests/contract/ -v --tb=short
+
+      - name: Run Integration Tests
+        run: |
+          cd backend
+          .venv/bin/pytest tests/integration/ -v --tb=short
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop

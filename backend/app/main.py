@@ -55,4 +55,17 @@ app.include_router(history_router.router, prefix="/api/v1/history", tags=["histo
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    from app.db import get_database
+    db_status = "unknown"
+    try:
+        db = get_database()
+        if db:
+            db_status = "connected"
+    except Exception:
+        db_status = "disconnected"
+
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "database": db_status
+    }

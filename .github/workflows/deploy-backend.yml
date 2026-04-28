@@ -13,7 +13,45 @@ jobs:
 
       - name: Trigger Railway Deploy
         run: |
-          curl -X POST "https://railway.app/api/v1/deploy/${{ secrets.RAILWAY_SERVICE_ID }}/overview" \
+          RESPONSE=$(curl -s -X POST "https://railway.app/api/v1/deploy/${{ secrets.RAILWAY_SERVICE_ID }}/overview" \
             -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"environment": "production"}'
+            -d '{"environment": "production"}')
+          echo "Deploy triggered: $RESPONSE"
+
+      - name: Wait for Deploy to Start
+        run: sleep 30
+
+      - name: Check Deploy Status (max 10 retries)
+        run: |
+          RAILWAY_URL="https://natillera-pwa-production.up.railway.app"
+          RETRIES=10
+          DEPLOYED=false
+
+          for i in $(seq 1 $RETRIES); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$RAILWAY_URL/health")
+            echo "Attempt $i: HTTP $HTTP_CODE"
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              DEPLOYED=true
+              break
+            fi
+            sleep 15
+          done
+
+          if [ "$DEPLOYED" = "false" ]; then
+            echo "ERROR: Deploy failed or health check timed out"
+            exit 1
+          fi
+
+          echo "Deploy successful - health check passed"
+
+  notify-failure:
+    needs: deploy
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Failure Notification
+        run: |
+          echo "Deploy failed - check Railway dashboard for details"
+          echo "Railway URL: https://railway.app/project/${{ secrets.RAILWAY_SERVICE_ID }}"
