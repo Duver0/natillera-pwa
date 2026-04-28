@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str = ""
 
     savings_rate: float = 10.0
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5173", "https://duver0.github.io"]
 
     @model_validator(mode="after")
     def resolve_supabase_key(self):
