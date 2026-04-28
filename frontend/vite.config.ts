@@ -45,6 +45,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        basePath: '/natillera-pwa',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
