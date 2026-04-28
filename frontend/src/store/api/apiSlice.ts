@@ -14,7 +14,7 @@ import type {
   PaymentResponse,
 } from '../../types'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const BASE_URL = import.meta.env.VITE_API_URL ?? 'https://natillera-pwa-production.up.railway.app'
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: `${BASE_URL}/api/v1`,
