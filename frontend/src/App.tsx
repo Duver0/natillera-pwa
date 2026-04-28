@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Provider } from 'react-redux'
 import { store } from './store/store'
 import { AppStartup } from './components/AppStartup'
@@ -18,7 +18,7 @@ import { InstallPrompt } from './components/InstallPrompt'
 export default function App() {
   return (
     <Provider store={store}>
-      <BrowserRouter>
+      <HashRouter>
         <AppStartup>
         <InstallPrompt />
         <Routes>
@@ -93,7 +93,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         </AppStartup>
-      </BrowserRouter>
+      </HashRouter>
     </Provider>
   )
 }
