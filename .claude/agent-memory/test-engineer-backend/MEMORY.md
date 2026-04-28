@@ -1,0 +1,1 @@
+- [Project context](project_natillera_phase3.md) — Fase 3 backend tests SPEC-001: 9 archivos en integration/, contract/, acceptance/

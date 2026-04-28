@@ -74,3 +74,11 @@ Week 2 + gap fixes complete 2026-04-23.
 - Spec: v2.2, Phase 4 checkboxes marked
 - PENDING-HUMAN: `pytest backend/tests/test_payment_*.py` + `npm test PaymentForm` — not run yet
 - Week 2 risk #3 (silent optimistic-lock gap): FIXED in payment_service.py
+
+**Sprint 1 — IN PROGRESS 2026-04-27 (Phase 2 Credit Module + Phase 5 Savings/History + Frontend Client Mgmt + Service Worker):**
+- backend-developer agent (ace9fae213a28ae32): Credit Module (credit_repository, CreditService: create/mora/get) + SavingsService + HistoryService + endpoints + tests
+- frontend-developer agent (ab2cbf137d0d8eea5): ClientList + ClientForm + ClientDetail + RTK Query clientApi + service worker + manifest.json
+- Running in background — awaiting completion notifications
+- Decision: SPEC-002 auth-multitenant AFTER SPEC-001 IMPLEMENTED (W4 ~2026-05-18)
+
+**SPEC-002 auth-multitenant:** spec file does not exist yet — spec-generator needed before W4

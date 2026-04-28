@@ -1,33 +1,56 @@
 /**
- * Shared test utilities — wraps components with Redux Provider.
+ * Shared test utilities — Redux store + Router wrapper.
  */
 import React from 'react'
 import { render, type RenderOptions } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
+import { MemoryRouter } from 'react-router-dom'
 import { apiSlice } from './store/api/apiSlice'
 import authReducer from './store/slices/authSlice'
 import uiReducer from './store/slices/uiSlice'
 
-function makeTestStore() {
+export function makeStore(preloadedState?: object) {
   return configureStore({
     reducer: {
       auth: authReducer,
       ui: uiReducer,
       [apiSlice.reducerPath]: apiSlice.reducer,
     },
-    middleware: (gDM) => gDM().concat(apiSlice.middleware),
+    middleware: (g) => g().concat(apiSlice.middleware),
+    preloadedState,
   })
 }
 
-function AllProviders({ children }: { children: React.ReactNode }) {
-  const store = makeTestStore()
-  return <Provider store={store}>{children}</Provider>
+interface WrapperOptions {
+  preloadedState?: object
+  initialEntries?: string[]
 }
 
-function customRender(ui: React.ReactElement, options?: Omit<RenderOptions, 'wrapper'>) {
-  return render(ui, { wrapper: AllProviders, ...options })
+export function renderWithProviders(
+  ui: React.ReactElement,
+  options: WrapperOptions & Omit<RenderOptions, 'wrapper'> = {}
+) {
+  const { preloadedState, initialEntries = ['/'], ...renderOptions } = options
+  const store = makeStore(preloadedState)
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <Provider store={store}>
+        <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
+      </Provider>
+    )
+  }
+  const result = render(ui, { wrapper: Wrapper, ...renderOptions })
+  return { ...result, store }
+}
+
+export const authenticatedState = {
+  auth: {
+    user: { id: 'u1', email: 'test@test.com' },
+    tokens: { accessToken: 'tok', refreshToken: 'ref' },
+    isLoading: false,
+    error: null,
+  },
 }
 
 export * from '@testing-library/react'
-export { customRender as render }

@@ -4,7 +4,7 @@ from typing import Literal
 
 
 class Settings(BaseSettings):
-    environment: Literal["local", "supabase"] = "local"
+    environment: Literal["local", "supabase", "production"] = "local"
     database_url: str = "postgresql://postgres:postgres@database:5432/postgres"
 
     supabase_url: str = ""

@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useGetClientsQuery } from '../store/api/apiSlice'
-import { Client } from '../types'
+import { useGetClientsQuery, useCreateClientMutation } from '../store/api/clientApi'
+import { ClientForm } from '../components/ClientForm'
+import type { ClientFormData } from '../components/ClientForm'
+import type { Client } from '../types'
 
 const PAGE_SIZE = 20
 
@@ -9,11 +11,13 @@ export function ClientListPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
+  const [showModal, setShowModal] = useState(false)
 
   const { data, isLoading, isFetching } = useGetClientsQuery(
     { search: search || undefined, limit: PAGE_SIZE, offset },
     { refetchOnMountOrArgChange: true }
   )
+  const [createClient, { isLoading: creating }] = useCreateClientMutation()
 
   const items: Client[] = data?.items ?? []
   const total = data?.total ?? 0
@@ -25,12 +29,19 @@ export function ClientListPage() {
     setOffset(0)
   }
 
+  const handleCreate = async (formData: ClientFormData) => {
+    const created = await createClient(formData).unwrap()
+    setShowModal(false)
+    navigate(`/clients/${created.id}`)
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-gray-800">Clients</h2>
         <button
-          onClick={() => navigate('/clients/new')}
+          onClick={() => setShowModal(true)}
+          data-testid="add-client-btn"
           className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"
         >
           + Add Client
@@ -42,13 +53,15 @@ export function ClientListPage() {
         placeholder="Search by name or phone..."
         value={search}
         onChange={(e) => handleSearch(e.target.value)}
-        className="w-full border rounded-lg px-3 py-2 text-sm mb-4"
+        className="w-full border rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
       {isLoading || isFetching ? (
-        <p className="text-center text-gray-500">Loading...</p>
+        <p className="text-center text-gray-500 py-8">Loading...</p>
       ) : items.length === 0 ? (
-        <p className="text-center text-gray-400 mt-8">No clients found.</p>
+        <p className="text-center text-gray-400 mt-8" data-testid="empty-state">
+          No clients found.
+        </p>
       ) : (
         <>
           <ul className="space-y-2" data-testid="client-list">
@@ -108,6 +121,33 @@ export function ClientListPage() {
             </div>
           )}
         </>
+      )}
+
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
+          data-testid="client-modal"
+          onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
+        >
+          <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">New Client</h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <ClientForm
+              isLoading={creating}
+              onSubmit={handleCreate}
+              onCancel={() => setShowModal(false)}
+              submitLabel="Create Client"
+            />
+          </div>
+        </div>
       )}
     </div>
   )

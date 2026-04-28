@@ -1,0 +1,1 @@
+- [project_stack.md](project_stack.md) — Backend stack: FastAPI + DatabaseInterface (asyncpg local / Supabase prod), not MongoDB
