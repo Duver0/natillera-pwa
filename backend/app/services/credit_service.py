@@ -6,6 +6,7 @@ from typing import List, Optional
 from app.services.base_service import BaseService
 from app.models.credit_model import CreditCreate
 from app.utils.calculations import PERIOD_DAYS, calculate_period_interest
+from app.repositories.credit_repository import CreditRepository
 
 
 class CreditService(BaseService):
@@ -220,6 +221,53 @@ class CreditService(BaseService):
 
         if installments:
             await self.db.table("installments").insert(installments).execute()
+
+    async def check_mora_status(self, credit_id: UUID) -> dict:
+        """
+        Query overdue installments and return mora state dict.
+        Does NOT persist; call get_by_id() if you need the full credit with persisted mora.
+        Returns: {"mora": bool, "mora_since": str | None}
+        """
+        repo = CreditRepository(self.db)
+        today = date.today().isoformat()
+        overdue = await repo.find_overdue_installments(str(credit_id), today)
+        mora = len(overdue) > 0
+        mora_since = min(r["expected_date"] for r in overdue) if overdue else None
+        return {"mora": mora, "mora_since": mora_since}
+
+    async def update(self, credit_id: UUID, patch: dict) -> dict:
+        """
+        Update a credit using optimistic locking when 'version' key is provided in patch.
+        patch must include 'expected_version' for optimistic path; otherwise blind update.
+        Raises HTTPException(409) on version conflict.
+        """
+        from fastapi import HTTPException
+
+        repo = CreditRepository(self.db)
+        expected_version = patch.pop("expected_version", None)
+        try:
+            if expected_version is not None:
+                return await repo.update_with_version(str(credit_id), self.user_id, expected_version, patch)
+            return await repo.update(str(credit_id), self.user_id, patch)
+        except ValueError as exc:
+            if "version_conflict" in str(exc):
+                raise HTTPException(status_code=409, detail="version_conflict")
+            raise
+
+    async def delete(self, credit_id: UUID) -> None:
+        """Soft-delete a credit by setting status=CLOSED."""
+        repo = CreditRepository(self.db)
+        await repo.soft_delete(str(credit_id), self.user_id)
+        credit = await repo.find_by_id(str(credit_id), self.user_id)
+        if credit:
+            await self._record_history(
+                event_type="CREDIT_CLOSED",
+                client_id=credit["client_id"],
+                credit_id=str(credit_id),
+                amount=float(credit.get("pending_capital", 0)),
+                description="Credit closed",
+                metadata={},
+            )
 
     async def _record_history(self, event_type: str, client_id: str, credit_id: str,
                                amount: float, description: str, metadata: dict) -> None:
