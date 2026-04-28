@@ -77,7 +77,7 @@ class AuthService:
             )
         except ValueError:
             raise
-        except Exception as e:
+        except Exception:
             raise ValueError("invalid_credentials")
 
     async def logout(self, access_token: str) -> None:
@@ -108,5 +108,5 @@ class AuthService:
             )
         except ValueError:
             raise
-        except Exception as e:
+        except Exception:
             raise ValueError("invalid_refresh_token")
