@@ -15,6 +15,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/icon-192.png', 'icons/icon-512.png'],
+      disableSelfSWRequest: true,
       manifest: {
         name: 'Natillera PWA',
         short_name: 'Natillera',
@@ -45,7 +46,6 @@ export default defineConfig({
         ],
       },
       workbox: {
-        basePath: '/natillera-pwa',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
