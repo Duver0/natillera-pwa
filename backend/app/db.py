@@ -290,13 +290,29 @@ async def init_local() -> LocalDatabase:
 
 async def init_supabase() -> SupabaseDatabase:
     settings = get_settings()
-    if not settings.supabase_url or not settings.supabase_key:
+    if not settings.supabase_url:
         raise RuntimeError(
-            "Supabase not configured. Set ENVIRONMENT=production and "
-            "SUPABASE_URL, SUPABASE_KEY environment variables."
+            "SUPABASE_URL not configured. Set ENVIRONMENT=production and "
+            "SUPABASE_URL in Railway variables."
         )
-    client = await create_supabase_client(settings.supabase_url, settings.supabase_key)
-    return SupabaseDatabase(client)
+    
+    key = settings.supabase_key or settings.supabase_anon_key
+    if not key:
+        raise RuntimeError(
+            "SUPABASE_KEY or SUPABASE_ANON_KEY not configured. "
+            "Set in Railway variables."
+        )
+    
+    # Check if key looks valid (should start with eyJ for JWT)
+    if not key.startswith("eyJ"):
+        print(f"WARNING: SUPABASE_KEY might be invalid (starts with: {key[:20]}...)")
+    
+    try:
+        client = await create_supabase_client(settings.supabase_url, key)
+        return SupabaseDatabase(client)
+    except Exception as e:
+        print(f"ERROR creating Supabase client: {e}")
+        raise
 
 
 def get_database() -> DatabaseInterface:

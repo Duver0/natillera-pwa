@@ -83,3 +83,14 @@ async def health():
         "version": "1.0.0",
         "database": db_status
     }
+
+
+@app.get("/debug/env")
+async def debug_env():
+    s = get_settings()
+    return {
+        "environment": s.environment,
+        "supabase_url": s.supabase_url[:20] + "..." if s.supabase_url else "NOT SET",
+        "supabase_key_set": bool(s.supabase_key),
+        "supabase_anon_key_set": bool(s.supabase_anon_key),
+    }
