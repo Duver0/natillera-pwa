@@ -17,6 +17,11 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class UserInfo(BaseModel):
+    id: str
+    email: str
+
+
 class UserProfile(BaseModel):
     id: UUID
     email: str
@@ -27,4 +32,4 @@ class UserProfile(BaseModel):
 class AuthResponse(BaseModel):
     access_token: str = ""
     refresh_token: str = ""
-    user: "UserProfile"
+    user: Optional[UserInfo] = None
