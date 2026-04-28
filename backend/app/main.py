@@ -23,7 +23,14 @@ limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_database()
+    try:
+        await init_database()
+        print(f"Database initialized. Environment: {get_settings().environment}")
+    except Exception as e:
+        print(f"ERROR initializing database: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
     yield
     await close_database()
 
