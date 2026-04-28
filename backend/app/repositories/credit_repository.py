@@ -30,7 +30,7 @@ class CreditRepository:
             .single()
             .execute()
         )
-        return result.data[0] if result.data else None
+        return result.data if result.data else None
 
     async def find_all(
         self,

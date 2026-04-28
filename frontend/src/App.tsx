@@ -13,12 +13,14 @@ import { CreditFormPage } from './pages/CreditFormPage'
 import { ClientListPage } from './pages/ClientListPage'
 import { SavingsPage } from './pages/SavingsPage'
 import { HistoryPage } from './pages/HistoryPage'
+import { InstallPrompt } from './components/InstallPrompt'
 
 export default function App() {
   return (
     <Provider store={store}>
       <BrowserRouter>
         <AppStartup>
+        <InstallPrompt />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
