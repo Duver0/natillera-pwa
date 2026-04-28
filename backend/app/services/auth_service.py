@@ -34,14 +34,20 @@ class AuthService:
             if response.user is None:
                 raise ValueError("registration_failed")
             
+            session = response.session
+            access_token = session.access_token if session else ""
+            refresh_token = session.refresh_token if session else ""
+            
             return AuthResponse(
-                access_token=response.session.access_token if response.session else "",
-                refresh_token=response.session.refresh_token if response.session else "",
+                access_token=access_token,
+                refresh_token=refresh_token,
                 user=UserInfo(
                     id=response.user.id,
                     email=response.user.email
                 )
             )
+        except ValueError:
+            raise
         except Exception as e:
             error_msg = str(e).lower()
             if "email_already_exists" in error_msg or "already been registered" in error_msg:
@@ -69,6 +75,8 @@ class AuthService:
                     email=response.user.email
                 )
             )
+        except ValueError:
+            raise
         except Exception as e:
             raise ValueError("invalid_credentials")
 
@@ -98,5 +106,7 @@ class AuthService:
                     email=response.user.email
                 )
             )
+        except ValueError:
+            raise
         except Exception as e:
             raise ValueError("invalid_refresh_token")
