@@ -1,9 +1,15 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from typing import Literal
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore"
+    )
+
     environment: Literal["local", "supabase", "production"] = "local"
     database_url: str = "postgresql://postgres:postgres@database:5432/postgres"
 
@@ -13,10 +19,6 @@ class Settings(BaseSettings):
 
     savings_rate: float = 10.0
     cors_origins: list[str] = ["http://localhost:5173"]
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 @lru_cache()
