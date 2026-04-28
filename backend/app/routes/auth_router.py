@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from app.db import get_database
+from app.db import get_database, is_supabase
 from app.services.auth_service import AuthService
 from app.models.auth_model import RegisterRequest, LoginRequest, RefreshRequest, AuthResponse
 
