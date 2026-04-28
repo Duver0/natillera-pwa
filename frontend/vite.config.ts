@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/natillera-pwa/',
   test: {
     globals: true,
     environment: 'jsdom',
@@ -21,7 +22,7 @@ export default defineConfig({
         theme_color: '#2563eb',
         background_color: '#f9fafb',
         display: 'standalone',
-        start_url: '/',
+        start_url: '/natillera-pwa/',
         icons: [
           {
             src: '/icons/icon-192.png',
