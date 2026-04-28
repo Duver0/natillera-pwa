@@ -42,6 +42,9 @@ async def _get_jwks() -> Dict[str, Any]:
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
 
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     if path in PUBLIC_PATHS or path.startswith("/openapi") or path.startswith("/docs"):
         return await call_next(request)
 
@@ -54,6 +57,7 @@ async def auth_middleware(request: Request, call_next):
     try:
         unverified_header = jwt.get_unverified_header(token)
         kid = unverified_header.get("kid")
+        alg = unverified_header.get("alg", "ES256")
 
         jwks = await _get_jwks()
         key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
@@ -61,11 +65,17 @@ async def auth_middleware(request: Request, call_next):
         if not key_data:
             return JSONResponse(status_code=401, content={"detail": "invalid_token"})
 
-        public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(key_data))
+        if alg.startswith("RS"):
+            public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(key_data))
+            algo = "RS256"
+        else:
+            public_key = jwt.algorithms.ECAlgorithm.from_jwk(json.dumps(key_data))
+            algo = "ES256"
+
         payload = jwt.decode(
             token,
             public_key,
-            algorithms=["RS256"],
+            algorithms=[algo],
             audience="authenticated",
             issuer=f"{SUPABASE_URL}/auth/v1",
         )
