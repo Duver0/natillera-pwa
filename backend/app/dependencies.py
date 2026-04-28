@@ -1,9 +1,5 @@
-from fastapi import Request, HTTPException, Depends
-from app.db import DatabaseInterface, get_database, is_supabase
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from supabase._async.client import AsyncClient as SupabaseClient
+from fastapi import Request, HTTPException
+from app.db import DatabaseInterface, get_database
 
 
 async def get_user_id(request: Request) -> str:

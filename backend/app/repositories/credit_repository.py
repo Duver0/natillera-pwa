@@ -4,9 +4,7 @@ Optimistic locking: update_with_version() raises ValueError on version mismatch.
 No business logic here. Services own the domain rules.
 """
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Optional
-from uuid import UUID
 
 
 class CreditRepository:

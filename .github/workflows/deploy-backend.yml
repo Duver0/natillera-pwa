@@ -11,15 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Railway
-        uses: eddycja/railway-action@v1
-        with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN }}
-          service: ${{ secrets.RAILWAY_SERVICE_ID }}
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
-          CORS_ORIGINS: '["https://duver0.github.io"]'
-          ENVIRONMENT: production
-          SAVINGS_RATE: '10.0'
+      - name: Trigger Railway Deploy
+        run: |
+          curl -X POST "https://railway.app/api/v1/deploy/${{ secrets.RAILWAY_SERVICE_ID }}/overview" \
+            -H "Authorization: Bearer ${{ secrets.RAILWAY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"environment": "production"}'

@@ -29,9 +29,6 @@ from app.services.base_service import BaseService
 from app.models.payment_model import (
     PaymentRequest,
     AppliedToEntry,
-    UpdatedCreditSnapshot,
-    PaymentResponse,
-    PaymentPreviewResponse,
 )
 
 

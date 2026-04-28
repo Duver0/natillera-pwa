@@ -3,7 +3,6 @@ Domain calculations — single source of truth.
 Frontend MUST NOT duplicate any of these formulas.
 """
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional
 
 PERIODS_PER_YEAR: dict[str, int] = {
     "DAILY": 365,

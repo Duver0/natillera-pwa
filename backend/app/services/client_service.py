@@ -1,6 +1,6 @@
 from uuid import UUID
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Optional
 
 from app.services.base_service import BaseService
 from app.models.client_model import ClientCreate, ClientUpdate

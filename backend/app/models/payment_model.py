@@ -6,7 +6,7 @@ All monetary fields use Decimal. No float.
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 

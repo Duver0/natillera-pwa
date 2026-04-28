@@ -8,7 +8,6 @@ GET  /payments        → list (legacy)
 """
 from fastapi import APIRouter, Depends, Query, HTTPException
 from uuid import UUID
-from decimal import Decimal
 
 from app.dependencies import get_user_id, get_db
 from app.services.payment_service import PaymentService, VersionConflict

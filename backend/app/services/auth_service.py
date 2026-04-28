@@ -1,4 +1,3 @@
-from app.db import get_database
 from app.models.auth_model import RegisterRequest, LoginRequest, RefreshRequest, AuthResponse
 
 
