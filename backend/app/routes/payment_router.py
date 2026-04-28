@@ -2,11 +2,13 @@
 Payment router — Phase 4.
 Contract: .github/specs/payment-contract.md
 
-POST /payments        → 201 PaymentResponse | 400 | 409 | 422 | 403
+POST /payments        → 201 PaymentResponse | 400 | 409 | 422 | 403 | 429
 POST /payments/preview → 200 PaymentPreviewResponse | 400 | 422 | 403
 GET  /payments        → list (legacy)
 """
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from uuid import UUID
 
 from app.dependencies import get_user_id, get_db
@@ -19,6 +21,7 @@ from app.models.payment_model import (
 )
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _service(db=Depends(get_db), user_id: str = Depends(get_user_id)) -> PaymentService:
@@ -35,12 +38,15 @@ async def preview_payment(
 
 
 @router.post("/", response_model=PaymentResponse, status_code=201)
+@limiter.limit("10/minute")
 async def process_payment(
+    request: Request,
     body: PaymentRequest,
     service: PaymentService = Depends(_service),
 ):
     """
     Process payment in mandatory order.
+    Rate limited: 10 requests per minute per IP.
     409 on optimistic lock conflict — client must retry.
     """
     try:

@@ -12,6 +12,7 @@ import { ClientFormPage } from './pages/ClientFormPage'
 import { CreditFormPage } from './pages/CreditFormPage'
 import { ClientListPage } from './pages/ClientListPage'
 import { SavingsPage } from './pages/SavingsPage'
+import { HistoryPage } from './pages/HistoryPage'
 
 export default function App() {
   return (
@@ -68,6 +69,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <SavingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clients/:clientId/history"
+            element={
+              <ProtectedRoute>
+                <HistoryPage />
               </ProtectedRoute>
             }
           />
