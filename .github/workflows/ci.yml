@@ -36,13 +36,8 @@ jobs:
 
       - name: Check unit coverage >= 80%
         run: |
-          coverage=$(cd backend && .venv/bin/python -c "
-import json
-with open('.coverage.json') as f:
-    data = json.load(f)
-print(int(data['totals']['percent_covered']))
-")
-          )
+          cd backend
+          coverage=$(.venv/bin/python -c "import json; f=open('.coverage.json'); d=json.load(f); print(int(d['totals']['percent_covered']))")
           if [ "$coverage" -lt 80 ]; then
             echo "Unit coverage $coverage% < 80%"
             exit 1
