@@ -274,6 +274,26 @@ def is_supabase() -> bool:
     return get_settings().environment == "production"
 
 
+async def init_database() -> None:
+    global _db, _test_mode
+    if _test_mode:
+        return
+    settings = get_settings()
+    if settings.environment == "local":
+        _db = await init_local()
+    else:
+        _db = await init_supabase()
+
+
+def set_test_mode(enabled: bool = True):
+    global _test_mode
+    _test_mode = enabled
+
+
+def is_test_mode() -> bool:
+    return _test_mode
+
+
 async def close_database() -> None:
     global _db
     if _db is not None and isinstance(_db, LocalDatabase):

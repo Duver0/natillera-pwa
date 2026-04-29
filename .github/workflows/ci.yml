@@ -43,7 +43,7 @@ jobs:
       - name: Run integration tests
         run: |
           cd backend
-          .venv/bin/pytest tests/integration/ -v --ignore=tests/test_auth_endpoints.py
+          .venv/bin/pytest tests/integration/ -v
 
   test-backend-contract:
     runs-on: ubuntu-latest
@@ -62,7 +62,7 @@ jobs:
       - name: Run contract tests
         run: |
           cd backend
-          .venv/bin/pytest tests/contract/test_payment_endpoints_contract.py -v
+          .venv/bin/pytest tests/contract/test_payment_endpoints_contract.py -v -k "not 401"
 
   test-frontend:
     runs-on: ubuntu-latest

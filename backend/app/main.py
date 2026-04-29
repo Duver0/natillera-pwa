@@ -21,6 +21,17 @@ from app.routes import (
 
 limiter = Limiter(key_func=get_remote_address)
 
+_test_mode = False
+
+
+def set_test_mode(enabled: bool = True):
+    global _test_mode
+    _test_mode = enabled
+
+
+def is_test_mode() -> bool:
+    return _test_mode
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
