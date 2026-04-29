@@ -1,15 +1,23 @@
 from fastapi import APIRouter, Request, HTTPException
-from app.db import get_database, is_supabase
+from app.db import get_database
 from app.services.auth_service import AuthService
 from app.models.auth_model import RegisterRequest, LoginRequest, RefreshRequest, AuthResponse
 
 router = APIRouter()
 
 
+def _check_auth_available():
+    from app.main import is_test_mode
+    from app.config import get_settings
+    
+    is_prod = get_settings().environment == "production"
+    if not is_prod and not is_test_mode():
+        raise HTTPException(status_code=501, detail="auth_not_available_in_local_mode")
+
+
 @router.post("/register", response_model=AuthResponse)
 async def register(body: RegisterRequest):
-    if not is_supabase():
-        raise HTTPException(status_code=501, detail="auth_not_available_in_local_mode")
+    _check_auth_available()
     db = get_database()
     service = AuthService(db)
     try:
@@ -23,8 +31,7 @@ async def register(body: RegisterRequest):
 
 @router.post("/login", response_model=AuthResponse)
 async def login(body: LoginRequest):
-    if not is_supabase():
-        raise HTTPException(status_code=501, detail="auth_not_available_in_local_mode")
+    _check_auth_available()
     db = get_database()
     service = AuthService(db)
     try:
@@ -35,8 +42,7 @@ async def login(body: LoginRequest):
 
 @router.post("/logout")
 async def logout(request: Request):
-    if not is_supabase():
-        raise HTTPException(status_code=501, detail="auth_not_available_in_local_mode")
+    _check_auth_available()
     db = get_database()
     token = request.headers.get("Authorization", "").split(" ", 1)[-1]
     service = AuthService(db)
@@ -46,8 +52,7 @@ async def logout(request: Request):
 
 @router.post("/refresh", response_model=AuthResponse)
 async def refresh(body: RefreshRequest):
-    if not is_supabase():
-        raise HTTPException(status_code=501, detail="auth_not_available_in_local_mode")
+    _check_auth_available()
     db = get_database()
     service = AuthService(db)
     try:

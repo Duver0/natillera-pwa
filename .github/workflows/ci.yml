@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test-backend:
+  test-backend-unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,11 +22,80 @@ jobs:
           cd backend
           python -m venv .venv
           .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install pytest pytest-asyncio pytest-cov
 
-      - name: Run backend tests
+      - name: Run unit tests with coverage
         run: |
           cd backend
-          .venv/bin/pytest --ignore=tests/contract --ignore=tests/integration --ignore=tests/test_auth_endpoints.py --ignore=tests/test_payment_service.py --ignore=tests/test_payments_preview.py --ignore=tests/test_payment_pending_capital_update.py --ignore=tests/test_payment_preview.py || true
+          .venv/bin/pytest tests/test_calculations.py tests/test_interest_calculation.py tests/test_mora_detection.py tests/test_installment_generation.py -v \
+            --cov=app.utils.calculations \
+            --cov=app.services.credit_service \
+            --cov=app.services.installment_service \
+            --cov-report=term-missing \
+            --cov-report=term-missing
+
+      - name: Check unit coverage >= 80%
+        run: |
+          coverage=$(cd backend && .venv/bin/python -c "
+import json
+with open('.coverage.json') as f:
+    data = json.load(f)
+print(int(data['totals']['percent_covered']))
+")
+          )
+          if [ "$coverage" -lt 80 ]; then
+            echo "Unit coverage $coverage% < 80%"
+            exit 1
+          fi
+          echo "Unit coverage: $coverage%"
+
+  test-backend-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run integration tests (NO Supabase)
+        run: |
+          cd backend
+          .venv/bin/pytest tests/integration/ -v \
+            --ignore=tests/test_auth_endpoints.py \
+            --cov=app.services \
+            --cov=app.repositories \
+            --cov-report=term-missing
+
+  test-backend-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run contract tests
+        run: |
+          cd backend
+          .venv/bin/pytest tests/contract/ -v --cov=app.main
 
   test-frontend:
     runs-on: ubuntu-latest
@@ -66,3 +135,18 @@ jobs:
         run: |
           cd backend && ruff check app/
           cd frontend && ruff check src/ || true
+
+  deploy-blocker:
+    needs: [test-backend-unit, test-backend-integration, test-backend-contract, lint]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all required jobs passed
+        run: |
+          FAILED=0
+          if [ "${{ needs.test-backend-unit.result }}" != "success" ]; then FAILED=1; fi
+          if [ "${{ needs.test-backend-integration.result }}" != "success" ]; then FAILED=1; fi
+          if [ "${{ needs.test-backend-contract.result }}" != "success" ]; then FAILED=1; fi
+          if [ "${{ needs.lint.result }}" != "success" ]; then FAILED=1; fi
+          if [ "$FAILED" -eq 1 ]; then exit 1; fi
+          echo "All tests passed. Ready to deploy."

@@ -6,7 +6,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
-from app.db import init_database, close_database
+from app.db import init_database, close_database, set_test_mode, is_test_mode
 from app.middleware.auth import auth_middleware
 from app.middleware.error_handler import register_error_handlers
 from app.routes import (
@@ -21,8 +21,24 @@ from app.routes import (
 
 limiter = Limiter(key_func=get_remote_address)
 
+_test_mode = False
+
+
+def set_test_mode(enabled: bool = True):
+    global _test_mode
+    _test_mode = enabled
+
+
+def is_test_mode() -> bool:
+    return _test_mode
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if _test_mode:
+        yield
+        return
+    
     try:
         await init_database()
         print(f"Database initialized. Environment: {get_settings().environment}")
