@@ -264,32 +264,14 @@ _db: DatabaseInterface | None = None
 _test_mode: bool = False
 
 
-def get_database() -> None:
-    global _db
+def get_database() -> DatabaseInterface:
     if _db is None:
         raise RuntimeError("Database not initialized. Call init_database() first.")
     return _db
 
 
-def set_test_mode(enabled: bool = True):
-    global _test_mode
-    _test_mode = enabled
-
-
-def is_test_mode() -> bool:
-    return _test_mode
-
-
-async def init_database() -> None:
-    global _db, _test_mode
-    if _test_mode:
-        return
-    settings = get_settings()
-
-    if settings.environment == "local":
-        _db = await init_local()
-    else:
-        _db = await init_supabase()
+def is_supabase() -> bool:
+    return get_settings().environment == "production"
 
 
 async def close_database() -> None:
@@ -339,20 +321,3 @@ async def init_supabase() -> SupabaseDatabase:
     except Exception as e:
         print(f"ERROR creating Supabase client: {e}")
         raise
-
-
-def get_database() -> DatabaseInterface:
-    if _db is None:
-        raise RuntimeError("Database not initialized. Call init_database() first.")
-    return _db
-
-
-def is_supabase() -> bool:
-    return get_settings().environment == "production"
-
-
-async def close_database() -> None:
-    global _db
-    if _db is not None and isinstance(_db, LocalDatabase):
-        await _db.pool.close()
-    _db = None
