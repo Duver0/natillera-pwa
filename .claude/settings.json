@@ -6,7 +6,7 @@
   "permissions": {
     "defaultMode": "bypassPermissions",
     "deny": [
-      "Bash(git reset --hard *)",
+      "Bash(git reset --hard *)"
     ]
   },
   "teammateMode": "in-process",
