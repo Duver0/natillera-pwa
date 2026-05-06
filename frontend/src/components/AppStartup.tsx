@@ -25,8 +25,16 @@ export function AppStartup({ children }: Props) {
         dispatch(setUser(data.user))
         dispatch(setTokens({ accessToken: data.access_token, refreshToken: data.refresh_token }))
       })
-      .catch(() => {
-        dispatch(clearAuth())
+      .catch((error: unknown) => {
+        // Solo limpiar sesion si el backend rechazo el token (401 Unauthorized).
+        // Errores de red (Mixed Content, timeout, CORS) son transitorios y no
+        // invalidan el refreshToken — conservar tokens para permitir reintento.
+        const status =
+          (error as { status?: number })?.status ??
+          (error as { originalStatus?: number })?.originalStatus
+        if (status === 401) {
+          dispatch(clearAuth())
+        }
       })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

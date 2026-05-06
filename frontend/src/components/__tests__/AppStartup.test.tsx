@@ -148,20 +148,37 @@ describe('AppStartup — refresh on mount when refreshToken exists but no user',
     })
   })
 
-  it('dispatches clearAuth on failed refresh', async () => {
-    // GIVEN refresh fails
-    mockRefreshUnwrap.mockRejectedValue(new Error('401 Unauthorized'))
+  it('dispatches clearAuth when backend explicitly rejects with 401', async () => {
+    // GIVEN refresh fails with 401 (invalid/expired token — backend decision)
+    mockRefreshUnwrap.mockRejectedValue({ status: 401 })
     const store = buildStore({ tokens: TOKENS, user: null })
 
     // WHEN
     renderAppStartup(store)
 
-    // THEN — store cleared
+    // THEN — store cleared because backend said token is invalid
     await waitFor(() => {
       const state = store.getState().auth
       expect(state.user).toBeNull()
       expect(state.tokens.accessToken).toBeNull()
       expect(state.tokens.refreshToken).toBeNull()
+    })
+  })
+
+  it('does NOT dispatch clearAuth on network error (Mixed Content, CORS, timeout)', async () => {
+    // GIVEN refresh fails with a network-level error (no HTTP status code)
+    // RTK Query represents network errors as { status: 'FETCH_ERROR', error: '...' }
+    mockRefreshUnwrap.mockRejectedValue({ status: 'FETCH_ERROR', error: 'TypeError: Failed to fetch' })
+    const store = buildStore({ tokens: TOKENS, user: null })
+
+    // WHEN
+    renderAppStartup(store)
+
+    // THEN — tokens preserved, user can retry after network recovers
+    await waitFor(() => {
+      const state = store.getState().auth
+      // tokens must still be present (not cleared)
+      expect(state.tokens.refreshToken).toBe('ref-stored')
     })
   })
 })

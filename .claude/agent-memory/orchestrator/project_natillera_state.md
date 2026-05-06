@@ -82,3 +82,11 @@ Week 2 + gap fixes complete 2026-04-23.
 - Decision: SPEC-002 auth-multitenant AFTER SPEC-001 IMPLEMENTED (W4 ~2026-05-18)
 
 **SPEC-002 auth-multitenant:** spec file does not exist yet — spec-generator needed before W4
+
+**Bug Fix 2026-05-06 — Mixed Content + Session Persistence:**
+- Spec: `.github/specs/fix-mixed-content-session-persistence.spec.md` (IN_PROGRESS)
+- Root cause: `apiSlice.ts` line 17 had a double `.replace()` with typo (`'https:/'` one slash) that could produce `https:///` triple-slash URL. Bug 2 (session) was a consequence of Bug 1 (network error on refresh -> catch block cleared auth).
+- Fix 1: `apiSlice.ts` — replaced buggy `.replace` chain with `startsWith('http://')` conditional
+- Fix 2: `AppStartup.tsx` — `.catch` now only calls `clearAuth()` on HTTP 401; network errors (FETCH_ERROR, TypeError) preserve tokens
+- Tests updated: `AppStartup.test.tsx` — added test for FETCH_ERROR preservation; `apiSlice.baseUrl.test.ts` created (new file) covering all URL construction cases
+- PENDING-HUMAN: run `npm test` to confirm all tests pass; deploy to verify in production

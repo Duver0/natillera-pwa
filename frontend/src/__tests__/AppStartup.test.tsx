@@ -73,9 +73,9 @@ describe('AppStartup — session persistence', () => {
     })
   })
 
-  it('clears auth when refresh fails', async () => {
+  it('clears auth when refresh fails with 401', async () => {
     mockRefreshMutation.mockReturnValue({
-      unwrap: () => Promise.reject(new Error('Token expired')),
+      unwrap: () => Promise.reject({ status: 401 }),
     })
 
     const store = makeStore({
@@ -98,6 +98,34 @@ describe('AppStartup — session persistence', () => {
     await waitFor(() => {
       const state = store.getState()
       expect(state.auth.tokens.refreshToken).toBeNull()
+    })
+  })
+
+  it('preserves auth on network error (Mixed Content, timeout)', async () => {
+    mockRefreshMutation.mockReturnValue({
+      unwrap: () => Promise.reject({ status: 'FETCH_ERROR', error: 'Mixed Content' }),
+    })
+
+    const store = makeStore({
+      auth: {
+        user: null,
+        tokens: { accessToken: null, refreshToken: 'preserved-refresh' },
+        isLoading: false,
+        error: null,
+      },
+    })
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter>
+          <AppStartup><div>content</div></AppStartup>
+        </MemoryRouter>
+      </Provider>
+    )
+
+    await waitFor(() => {
+      const state = store.getState()
+      expect(state.auth.tokens.refreshToken).toBe('preserved-refresh')
     })
   })
 
